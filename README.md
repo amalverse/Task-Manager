@@ -1,16 +1,296 @@
-# React + Vite
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# Task Manager - Architecture & Data Flow Guide
 
-Currently, two official plugins are available:
+## Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+This is a React Redux Task Manager application that demonstrates modern state management patterns. All global data is stored in a Redux store, making it easy for components to share data without prop drilling.
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 📦 Architecture Layers
 
-## Expanding the ESLint configuration
+### 1. **Redux Store** (`src/redux/store.js`)
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- **Purpose**: Central hub for all application state
+- **What it does**: Creates and configures the Redux store
+- **Key exports**: `store` object
+
+### 2. **Redux Slice** (`src/redux/features/tasks/taskSlice.js`)
+
+- **Purpose**: Defines state structure and all reducer functions
+- **What it contains**:
+  - **Initial State**:
+    - `tasks` array (loaded from localStorage)
+    - `filter` object (status and search filters)
+  - **Reducers**: Functions that modify state (addTask, deleteTask, toggleComplete, editTask, setStatusFilter, setSearchFilter)
+  - **Actions**: Auto-generated action creators exported for components to use
+- **Storage**: Automatically saves tasks to browser's localStorage
+
+### 3. **Components** (React UI Layer)
+
+Each component can **read** from and **write** to the Redux store
+
+---
+
+## 🔄 Data Flow Diagram
+
+```
+Redux Store (single source of truth)
+    ↑                           ↓
+    |                           |
+    |                           |
+  dispatch(action)        useSelector(state)
+    |                           |
+    ↑                           ↓
+┌─────────────────────────────────────┐
+│  TaskForm Component                 │
+│  - Input field (local state)        │
+│  - On submit: dispatch addTask()    │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│  TaskList Component                 │
+│  - Gets tasks from Redux            │
+│  - Filters & displays tasks         │
+│  - Dispatches: toggle, edit, delete │
+└─────────────────────────────────────┘
+```
+
+---
+
+## 🔧 How Each Component Works
+
+### **TaskForm Component** (`src/components/TaskForm.jsx`)
+
+**Purpose**: Create new tasks
+
+**Local State Used**:
+
+- `text`: Input field value
+
+**Redux Actions Dispatched**:
+
+- `addTask({ id, text, completed })`
+
+**Flow**:
+
+1. User types in input field (updates local `text` state)
+2. User clicks "Add Task" button
+3. Component dispatches `addTask` action to Redux
+4. Redux reducer receives action, adds task to array
+5. Redux saves tasks to localStorage
+6. All components subscribed to tasks state are notified
+7. Input field is cleared
+
+---
+
+### **TaskList Component** (`src/components/TaskList.jsx`)
+
+**Purpose**: Display, filter, and manage tasks
+
+**Data from Redux** (`useSelector`):
+
+- `tasks`: array of all tasks
+- `filter`: current search and status filters
+
+**Local State Used**:
+
+- `editId`: which task is being edited (null if none)
+- `editText`: text being typed in edit field
+
+**Computed Value**:
+
+- `filteredTasks`: tasks filtered by status AND search text
+
+**Filtering Logic**:
+
+```
+tasks → [filter by status] → [filter by search] → filteredTasks
+```
+
+**Redux Actions Dispatched**:
+
+- `toggleComplete(taskId)`: Mark task done/undone
+- `deleteTask(taskId)`: Remove task
+- `editTask({ id, newText })`: Update task text
+- `setStatusFilter(status)`: Change status filter
+- `setSearchFilter(searchText)`: Change search filter
+
+**Features**:
+
+- ✅ **Checkbox**: Click to mark complete/incomplete
+- ✏️ **Edit Button**: Enter edit mode, shows input field
+- 💾 **Save Button**: Save edited task back to Redux
+- 🗑️ **Delete Button**: Remove task permanently
+- 🔍 **Search**: Filter tasks by text
+- 📊 **Status Filters**: Show all, pending, or complete tasks
+
+---
+
+## 📊 State Structure
+
+```javascript
+{
+  tasks: [
+    {
+      id: "unique-id",        // Generated by nanoid()
+      text: "Buy groceries",  // Task description
+      completed: false        // Is task done?
+    },
+    // more tasks...
+  ],
+  filter: {
+    status: "all",            // "all" | "pending" | "complete"
+    search: ""                // Search query text
+  }
+}
+```
+
+---
+
+## 🔀 Redux Reducers Explained
+
+### **addTask(state, action)**
+
+- **When**: User submits TaskForm
+- **Does**: Adds new task to `state.tasks` array
+- **Saves**: Updated tasks to localStorage
+
+### **deleteTask(state, action)**
+
+- **When**: User clicks Delete button
+- **Does**: Removes task with matching ID from array
+- **Saves**: Updated tasks to localStorage
+
+### **toggleComplete(state, action)**
+
+- **When**: User clicks checkbox
+- **Does**: Flips the `completed` property of a task
+- **Saves**: Updated tasks to localStorage
+
+### **editTask(state, action)**
+
+- **When**: User clicks Save in edit mode
+- **Does**: Updates task text
+- **Saves**: Updated tasks to localStorage
+
+### **setStatusFilter(state, action)**
+
+- **When**: User clicks status filter button
+- **Does**: Updates `filter.status` ("all", "pending", or "complete")
+- **Saves**: Not saved (filter resets on refresh)
+
+### **setSearchFilter(state, action)**
+
+- **When**: User types in search input
+- **Does**: Updates `filter.search` with search text
+- **Saves**: Not saved (filter resets on refresh)
+
+---
+
+## 💾 Data Persistence
+
+**Tasks are saved to localStorage** automatically after any modification:
+
+- ✅ Adding a task
+- ✅ Deleting a task
+- ✅ Toggling completion
+- ✅ Editing text
+
+**Filters are NOT saved** (resets on page refresh)
+
+**On app load**:
+
+- `loadTasksFromLocalStorage()` retrieves saved tasks
+- If no tasks in storage, starts with empty array
+
+---
+
+## 🎯 Key Concepts for Students
+
+### **Redux Hooks Used**
+
+**`useSelector()`** - Read data from Redux store
+
+```javascript
+const { tasks, filter } = useSelector((state) => state.tasks);
+// Component re-renders whenever tasks or filter changes
+```
+
+**`useDispatch()`** - Send actions to Redux store
+
+```javascript
+const dispatch = useDispatch();
+dispatch(addTask({...}));  // Send action to reducer
+```
+
+### **Local State vs Redux State**
+
+**Use Local State For**:
+
+- Form input values (TaskForm's `text`)
+- UI-only state (TaskList's `editId` and `editText`)
+- State that doesn't need to persist
+
+**Use Redux For**:
+
+- Tasks array (shared by all components)
+- Filters (shared by all components)
+- Data that needs to persist
+
+### **Component Communication**
+
+Components don't pass data directly. They communicate through Redux:
+
+1. TaskForm dispatches `addTask` → updates Redux store
+2. TaskList is subscribed to store via `useSelector`
+3. TaskList automatically re-renders when store changes
+4. TaskList sees new task and displays it
+
+This avoids "prop drilling" (passing props through many levels).
+
+---
+
+## 🚀 How to Extend This App
+
+**Add a new feature?** Follow these steps:
+
+1. **Define the state** in `taskSlice.js` initialState
+2. **Create a reducer** in `taskSlice.js` reducers object
+3. **Export the action** from `taskSlice.js`
+4. **Use the hook** in your component:
+   - `useSelector()` to read data
+   - `useDispatch()` to send actions
+5. **Dispatch actions** from your component
+6. **Component automatically re-renders** when state changes
+
+---
+
+## 📁 File Structure
+
+```
+src/
+├── App.jsx                          (Main component)
+├── components/
+│   ├── TaskForm.jsx                 (Create tasks)
+│   └── TaskList.jsx                 (Display & manage tasks)
+└── redux/
+    ├── store.js                     (Configure store)
+    └── features/
+        └── tasks/
+            └── taskSlice.js         (State + reducers + actions)
+```
+
+---
+
+## ✨ Summary
+
+This app demonstrates:
+
+- ✅ Redux for state management
+- ✅ Redux Toolkit for simplified Redux
+- ✅ useSelector and useDispatch hooks
+- ✅ Local vs global state
+- ✅ Browser localStorage for persistence
+- ✅ Component re-rendering based on state changes
+- ✅ Filtering and searching data
