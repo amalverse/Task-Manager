@@ -1,3 +1,5 @@
+#Task Manager: A React and Redux Project. 
+<img width="1920" height="898" alt="Task Manager" src="https://github.com/user-attachments/assets/e4ae3f30-7065-4f53-998e-a0f696dc756a" />
 
 # Task Manager - Architecture & Data Flow Guide
 
